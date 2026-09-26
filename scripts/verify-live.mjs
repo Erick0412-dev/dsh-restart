@@ -11,8 +11,16 @@ const require = createRequire(path.join(harnessRoot, 'apps', 'web', 'package.jso
 const { chromium } = require('playwright')
 
 const screenshotPath = process.env.DSH_VERIFY_SCREENSHOT
+// Chrome is only the transport for this check: DSH_VERIFY_CHROME wins so a host
+// can point at a nightly channel or a container path, and the platform default
+// keeps the script usable on Linux, macOS and Windows alike.
+const DEFAULT_CHROME_PATH = process.platform === 'win32'
+  ? 'C:/Program Files/Google/Chrome/Application/chrome.exe'
+  : process.platform === 'darwin'
+    ? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+    : '/usr/bin/google-chrome'
 const browser = await chromium.launch({
-  executablePath: 'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+  executablePath: process.env.DSH_VERIFY_CHROME ?? DEFAULT_CHROME_PATH,
   headless: true,
 })
 const context = await browser.newContext({ viewport: { width: 1280, height: 720 }, locale: 'zh-CN' })
@@ -72,6 +80,11 @@ try {
     await page.screenshot({ path: process.env.DSH_VERIFY_DEBUG_SCREENSHOT })
     console.log(JSON.stringify({ dialogs: await page.locator('[role="dialog"]').allInnerTexts() }))
   }
+  // The sidebar action lives in the shell, so assert it before the settings
+  // dialog makes the rest of the page inert.
+  const sidebarRestart = page.getByRole('button', { name: '重启 DSH 后端', exact: true })
+  await sidebarRestart.waitFor({ timeout: 20_000 })
+  assert.match(String(await sidebarRestart.getAttribute('title')), /重启 DSH 后端/)
   await clickFirst([
     page.getByRole('button', { name: '设置', exact: true }),
     page.getByText('设置', { exact: true }),
@@ -82,13 +95,11 @@ try {
     settingsDialog.getByRole('button', { name: '插件', exact: true }),
     settingsDialog.getByText('插件', { exact: true }),
   ])
-  await clickFirst([
-    settingsDialog.getByRole('tab', { name: '插件配置', exact: true }),
-    settingsDialog.getByText('插件配置', { exact: true }),
-  ])
-  const restartCard = settingsDialog.getByRole('button', { name: /DSH 重启/ })
-  await restartCard.waitFor({ timeout: 20_000 })
-  await restartCard.click()
+  // DSH 0.1.7 renders configurable plugins as tabs of the 插件 section
+  // (slot settings.plugins.tab); the 0.1.5-era 「插件配置」 card list is gone.
+  const restartTab = settingsDialog.getByRole('tab', { name: 'DSH 重启', exact: true })
+  await restartTab.waitFor({ timeout: 20_000 })
+  await restartTab.click()
 
   const settingsText = await page.locator('body').innerText()
   assert.match(settingsText, /重启后注入的提示词/)

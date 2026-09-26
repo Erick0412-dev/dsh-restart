@@ -14,6 +14,9 @@ export const zh = {
   restartFailed: '未能安排重启，请检查服务日志后重试。',
   restartStale: '已发送重启请求，但进程身份始终未变化。请检查服务日志。',
   restartSucceeded: 'DSH 已重启并恢复连接。',
+  sidebarTitle: '重启 DSH 后端',
+  sidebarRestarting: '正在重启…',
+  sidebarFailed: '重启请求失败，点击重试',
 } as const
 
 export const en = {
@@ -32,4 +35,7 @@ export const en = {
   restartFailed: 'Could not schedule the restart. Check the service logs and try again.',
   restartStale: 'The restart was requested, but the process identity never changed. Check the service logs.',
   restartSucceeded: 'DSH restarted and reconnected.',
+  sidebarTitle: 'Restart DSH backend',
+  sidebarRestarting: 'Restarting…',
+  sidebarFailed: 'Restart request failed, click to retry',
 } as const

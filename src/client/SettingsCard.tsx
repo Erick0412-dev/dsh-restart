@@ -74,7 +74,7 @@ export function SettingsCard(props: SettingsCardProps) {
   }
 
   return (
-    <li className={`${css.card} ${open ? css.cardOpen : ''}`}>
+    <div className={`${css.card} ${open ? css.cardOpen : ''}`}>
       <button
         type="button"
         className={css.header}
@@ -119,6 +119,6 @@ export function SettingsCard(props: SettingsCardProps) {
           </div>
         </div>
       ) : null}
-    </li>
+    </div>
   )
 }
