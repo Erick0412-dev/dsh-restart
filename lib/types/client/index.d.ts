@@ -1,7 +1,9 @@
 /**
- * dsh-restart — client half: a plugin-config card (设置 → 插件 → 可配置) bound
- * to the `dsh-restart` settings namespace, so edits persist to settings.yaml and
- * the Host reads them back through installSettingsSection.
+ * dsh-restart — client half: a settings tab page (设置 → 插件, where DSH 0.1.7
+ * replaced the configurable-plugin card list with a tab strip) plus a
+ * persistent restart button in the sidebar footer rail. Both are bound to the
+ * dsh-restart settings namespace, so edits persist to settings.yaml and the
+ * Host reads them back through installSettingsSection.
  */
 import type { Context } from './context-types.ts';
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots';

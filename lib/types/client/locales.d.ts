@@ -14,6 +14,9 @@ export declare const zh: {
     readonly restartFailed: "未能安排重启，请检查服务日志后重试。";
     readonly restartStale: "已发送重启请求，但进程身份始终未变化。请检查服务日志。";
     readonly restartSucceeded: "DSH 已重启并恢复连接。";
+    readonly sidebarTitle: "重启 DSH 后端";
+    readonly sidebarRestarting: "正在重启…";
+    readonly sidebarFailed: "重启请求失败，点击重试";
 };
 export declare const en: {
     readonly title: "DSH Restart";
@@ -31,4 +34,7 @@ export declare const en: {
     readonly restartFailed: "Could not schedule the restart. Check the service logs and try again.";
     readonly restartStale: "The restart was requested, but the process identity never changed. Check the service logs.";
     readonly restartSucceeded: "DSH restarted and reconnected.";
+    readonly sidebarTitle: "Restart DSH backend";
+    readonly sidebarRestarting: "Restarting…";
+    readonly sidebarFailed: "Restart request failed, click to retry";
 };

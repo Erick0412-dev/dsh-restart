@@ -21,6 +21,12 @@ export declare const styles: {
     readonly actionHint: "dsh-restart-action-hint";
     readonly failed: "dsh-restart-failed";
     readonly restart: "dsh-restart-button";
+    readonly sidebarButton: "dsh-restart-sidebar-button";
+    readonly sidebarButtonWide: "dsh-restart-sidebar-button-wide";
+    readonly sidebarButtonBusy: "dsh-restart-sidebar-button-busy";
+    readonly sidebarButtonFailed: "dsh-restart-sidebar-button-failed";
+    readonly sidebarSpin: "dsh-restart-sidebar-spin";
+    readonly sidebarText: "dsh-restart-sidebar-text";
 };
 /** Install card styles once without creating a second dynamically loaded asset. */
 export declare function ensureStyles(): void;
