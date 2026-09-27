@@ -6,6 +6,7 @@ export declare const zh: {
     readonly continuePrompt: "重启后注入的提示词";
     readonly continuePromptHint: "重启后自动继续时注入给 agent 的文本（空则用默认）";
     readonly readOnly: "当前配置为只读";
+    readonly settingsUnavailable: "设置服务暂不可用：下方开关需要 DSH 为本插件提供设置命名空间，重启按钮不受影响。";
     readonly restartNow: "立即重启";
     readonly restarting: "正在重启…";
     readonly restartHint: "配置修改会自动保存；立即重启会短暂断开当前页面。";
@@ -25,6 +26,7 @@ export declare const en: {
     readonly continuePrompt: "Continue prompt";
     readonly continuePromptHint: "Text injected to the agent after restart (empty = default)";
     readonly readOnly: "This configuration is read-only";
+    readonly settingsUnavailable: "The settings service is unavailable: the switches below need DSH to serve this plugin a settings namespace. The restart button still works.";
     readonly restartNow: "Restart now";
     readonly restarting: "Restarting…";
     readonly restartHint: "Configuration changes save automatically; restarting briefly disconnects this page.";
