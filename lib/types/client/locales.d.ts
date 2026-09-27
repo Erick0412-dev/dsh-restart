@@ -6,6 +6,7 @@ export declare const zh: {
     readonly continuePrompt: "重启后注入的提示词";
     readonly continuePromptHint: "重启后自动继续时注入给 agent 的文本（空则用默认）";
     readonly readOnly: "当前配置为只读";
+    readonly settingsUnavailable: "设置服务暂不可用：下方开关需要 DSH 为本插件提供设置命名空间，重启按钮不受影响。";
     readonly quickSection: "快捷重启入口";
     readonly quickSidebar: "在左下角显示快捷重启";
     readonly quickSidebarHint: "显示在侧边栏底部、设置按钮上方，与其它插件的入口并列（列表槽，不抢占位置）。";
@@ -34,6 +35,7 @@ export declare const en: {
     readonly continuePrompt: "Continue prompt";
     readonly continuePromptHint: "Text injected to the agent after restart (empty = default)";
     readonly readOnly: "This configuration is read-only";
+    readonly settingsUnavailable: "The settings service is unavailable: the switches below need DSH to serve this plugin a settings namespace. The restart button still works.";
     readonly quickSection: "Quick restart entry";
     readonly quickSidebar: "Show a quick restart in the bottom-left corner";
     readonly quickSidebarHint: "Rendered at the sidebar foot above Settings, stacked with any other plugin entry (a list slot, so nothing is displaced).";
