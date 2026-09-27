@@ -39,8 +39,12 @@ export function RestartSection(props: RestartSectionProps) {
     return () => { window.clearTimeout(timer) }
   }, [succeeded])
 
-  if (!state.available) return null
-  const disabled = !state.writable
+  // The page is never empty: a host that has not served this entry's settings
+  // namespace yet still gets the restart button (the reason this plugin
+  // exists) plus an explicit note, instead of a blank panel the user cannot
+  // tell apart from a broken install.
+  const editable = state.available
+  const disabled = !editable || !state.writable
   const busy = restart.phase === 'busy'
 
   const writeText = (field: string, value: string): void => {
@@ -55,7 +59,8 @@ export function RestartSection(props: RestartSectionProps) {
     <div className={css.page}>
       <h2 className={css.pageTitle}>{t('title')}</h2>
       <p className={css.pageDescription}>{t('description')}</p>
-      {state.writable ? null : <p className={css.readOnly} role="status">{t('readOnly')}</p>}
+      {editable ? null : <p className={css.readOnly} role="status">{t('settingsUnavailable')}</p>}
+      {!editable || state.writable ? null : <p className={css.readOnly} role="status">{t('readOnly')}</p>}
 
       <div className={css.rows}>
         <label className={css.row + ' ' + css.toggleField}>

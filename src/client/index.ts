@@ -18,7 +18,7 @@
  */
 import type { Context } from './context-types.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
-import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
+import { createSettingsSource } from './settings-source.ts'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
 import { HeaderQuickRestart, SidebarQuickRestart } from './QuickRestartButton.tsx'
 import { ConfirmDialogSurface } from './RestartConfirmDialog.tsx'
@@ -29,7 +29,10 @@ import { ensureStyles } from './styles.ts'
 import type { SettingsSectionOwnerProps } from './slot-contracts.ts'
 
 export const name = 'dsh-restart-client'
-export const inject = ['slots', 'locale', 'settingsScope']
+// Both settings services are optional (see settings-source.ts): demanding one
+// here would keep the whole plugin — quick restart entries included — from
+// applying on a host that does not mount it.
+export const inject = ['slots', 'locale']
 export const NS = 'restart.card'
 
 /** The slice of the host's settings the UI projects. */
@@ -63,15 +66,15 @@ export function apply(ctx: Context): void {
   ensureStyles()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-restart: dictionaries')
 
-  const scope = ctx.settingsScope.bind({ namespace: 'dsh-restart' }) as SettingsScope<unknown>
+  const source = createSettingsSource(ctx, 'dsh-restart')
   const t = ctx.locale.bind(NS)
 
   const project = (): RestartCardState => {
-    const snap = scope.getSnapshot()
-    const value = (snap.value ?? {}) as Record<string, unknown>
+    const snap = source.snapshot()
+    const value = (snap?.value ?? {}) as Record<string, unknown>
     return {
-      available: snap.status === 'ready',
-      writable: snap.writable,
+      available: snap?.status === 'ready',
+      writable: snap?.writable === true,
       legacyRestart: value.legacyRestart === true,
       continuePrompt: typeof value.continuePrompt === 'string' ? value.continuePrompt : '',
       // Absent (older settings.yaml, or a host that has not reloaded its
@@ -82,7 +85,11 @@ export function apply(ctx: Context): void {
   }
 
   const store: SnapshotStore<RestartCardState> = createSnapshotStore(project())
-  scope.subscribe(() => { store.set(project()) })
+  const unsubscribeSettings = source.subscribe(() => { store.set(project()) })
+  ctx.effect(() => () => {
+    unsubscribeSettings()
+    source.dispose()
+  }, 'dsh-restart: settings source')
 
   const hooksOnly = (): { hooks: { dshRestart: SnapshotStore<RestartCardState> } } => ({
     hooks: { dshRestart: store },
@@ -98,8 +105,8 @@ export function apply(ctx: Context): void {
     locale: NS,
     inject: () => ({
       ...hooksOnly(),
-      set: (field: string, value: unknown) => { void scope.set(field, value) },
-      clear: (field: string) => { void scope.unset(field) },
+      set: (field: string, value: unknown) => { source.set(field, value) },
+      clear: (field: string) => { source.unset(field) },
     }),
   }, RestartSection))
 
