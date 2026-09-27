@@ -27,7 +27,7 @@ import type {} from '@deepseek-ai/dsh-shell'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 import { spawn } from 'node:child_process'
@@ -42,6 +42,22 @@ import { superviseRestartHelper } from './restart-helper-lifecycle.js'
 
 export const name = 'dsh-restart'
 export const inject = ['tools', 'commands', 'agents', 'shell', 'sandboxPolicy']
+
+/**
+ * Producer-owned message source kind for the session-format v4 log.
+ *
+ * Before v4 a plugin-authored message could claim the shared `plugin` kind.
+ * The v4 validator instead resolves `source.kind` against the producer-owned
+ * kinds declared in this merge-extensible map and rejects every other value
+ * with `SessionFormatError: format v4 message requires a producer-owned source
+ * kind`, so — exactly like the harness's own producers — we declare ours here
+ * rather than reusing someone else's identity.
+ */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'dsh-restart': { readonly kind: 'dsh-restart' } & ContextFormed
+  }
+}
 
 /** Plugin configuration (editable via settings.yaml and, later, the UI card). */
 interface RestartConfig {
@@ -179,7 +195,7 @@ function tryAutoContinue(ctx: Context, dynamic: () => RestartConfig): void {
       try {
         agent.followup(createUserMessage({
           content: [{ type: 'text', text: dynamic().continuePrompt }],
-          source: { kind: 'plugin', plugin: name, form: 'instructions' },
+          source: { kind: name, form: 'instructions' },
         }))
       } catch (error) {
         console.error('[dsh-restart] auto-continue failed:', error)
