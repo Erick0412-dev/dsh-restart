@@ -10,7 +10,7 @@
  * The restart button goes through a confirmation gate: this page can restart the
  * process the page itself is running in.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { RestartSectionProps } from './index.ts'
 import { RestartConfirmDialog } from './RestartConfirmDialog.tsx'
 import { consumeRestartCompleted } from './restart-marker.ts'
@@ -27,6 +27,13 @@ export function RestartSection(props: RestartSectionProps) {
   const state = useDshRestart(snapshot => snapshot)
   const restart = useRestartAction()
   const [completed, setCompleted] = useState(consumeRestartCompleted)
+  // The text field is backed by the host's settings document, which answers a
+  // write asynchronously: a controlled input bound straight to that value drops
+  // every keystroke the user makes before the echo arrives. Keep a local draft
+  // while the field is being edited, write it debounced, and fall back to the
+  // host's value once the echo matches.
+  const [draft, setDraft] = useState<string | null>(null)
+  const lastSent = useRef<string | null>(null)
   // Either this run reported success, or a manual refresh consumed the marker.
   const succeeded = completed || restart.succeeded
 
@@ -51,6 +58,26 @@ export function RestartSection(props: RestartSectionProps) {
     if (value.trim() === '') clear(field)
     else set(field, value.trim())
   }
+
+  const promptValue = draft ?? state.continuePrompt
+  const commitPrompt = (): void => {
+    if (draft === null) return
+    const next = draft.trim()
+    if (next === state.continuePrompt) { setDraft(null); return }
+    lastSent.current = next
+    writeText('continuePrompt', next)
+  }
+  useEffect(() => {
+    if (draft === null) return
+    const next = draft.trim()
+    if (next === state.continuePrompt) { lastSent.current = null; setDraft(null); return }
+    if (lastSent.current === next) return
+    const timer = window.setTimeout(() => {
+      lastSent.current = next
+      writeText('continuePrompt', next)
+    }, 500)
+    return () => { window.clearTimeout(timer) }
+  }, [draft, state.continuePrompt])
   const status = restart.phase === 'failed'
     ? (restart.stale ? t('restartStale') : t('restartFailed'))
     : succeeded ? t('restartSucceeded') : t('restartHint')
@@ -83,9 +110,11 @@ export function RestartSection(props: RestartSectionProps) {
             id="dsh-restart-continue-prompt"
             className={css.input}
             type="text"
-            value={state.continuePrompt}
+            value={promptValue}
             disabled={disabled}
-            onChange={event => { writeText('continuePrompt', event.currentTarget.value) }}
+            onChange={event => { setDraft(event.currentTarget.value) }}
+            onBlur={commitPrompt}
+            onKeyDown={event => { if (event.key === 'Enter') commitPrompt() }}
           />
           <span className={css.hint}>{t('continuePromptHint')}</span>
         </label>
