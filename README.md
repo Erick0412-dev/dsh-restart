@@ -16,7 +16,7 @@
   - `continuePrompt` — 重启后自动继续时注入给 agent 的提示词。
   - `quickRestartSidebar` — 是否在主面板左下角动作栏（恰好是 Settings 上方）显示一键重启，默认开。
   - `quickRestartHeader` — 是否在对话标题右侧显示一键重启，默认关。
-- **「立即重启」按钮（二次确认）**：先弹确认对话框，确认后才读取当前进程身份、安排重启，并等待新进程恢复后自动刷新页面。只读 GET 返回 `{ pid, startedAt }`；重启路由复用 Connection 的信任栅栏（Host/Origin + 浏览器认证），与 `/api` 走同一道门，所以页面能用的访问方式（含受信任的反向代理 / Tailscale）按钮一样可用。宿主没有 Connection 服务时退回历史规则：仅环回同源。
+- **「立即重启」按钮（二次确认）**：先弹确认对话框，确认后才读取当前进程身份、安排重启，并等待新进程恢复后在原地提示「重启完成」（不再强制刷新页面）。只读 GET 返回 `{ pid, startedAt }`；重启路由复用 Connection 的信任栅栏（Host/Origin + 浏览器认证），与 `/api` 走同一道门，所以页面能用的访问方式（含受信任的反向代理 / Tailscale）按钮一样可用。宿主没有 Connection 服务时退回历史规则：仅环回同源。
 - **主面板一键重启（两处可选 seat）**：主面板左下角动作栏（`sidebar.footer.action`，渲染在
   Settings 这一行上方，默认开）与对话标题右侧（`conversation.session.header.actions`，
   默认关，用于侧边栏收起/隐藏时）。两个 seat 都是 `list` slot，其它插件是并排叠加而不是
@@ -41,7 +41,7 @@
 `@deepseek-ai/dsh-client-runtime`，客户端契约分别迁移到 Cordis、
 `dsh-client-store` 与 `dsh-client-ui-settings`，不会混装 rc.2 运行时。
 
-`0.1.3-alpha.6` 只改客户端注册、一键重启入口与自动继续消息的来源标记，源码依赖仍锁在
+`0.1.3-alpha.6` 只改客户端注册、一键重启入口与重启后的自动继续（生产者的 source kind + 服务端恢复会话），源码依赖仍锁在
 `0.1.5-alpha.1`：用到的 `settings.section` / `sidebar.footer.action` /
 `conversation.session.header.actions` 都是 `list` slot，插件既不占别人的格子也不会被别人
 顶掉，同一份 bundle 在 `0.1.5-alpha.1` 与 `0.1.7-rc.2` 上都能挂载。
@@ -64,6 +64,8 @@
 - 重启路由的信任判定改为复用 Connection 的 `requestRejection`，与 `/api` 同一道
   Host/Origin + 浏览器认证栅栏（受信任的局域网 / 反向代理访问同样可用）；宿主没有
   Connection 服务时保留原环回同源规则，也不再需要额外的放行开关。
+- 重启成功后不再强制刷新页面：确认后等待新进程恢复，由入口或设置页在原地提示「重启完成」
+  并自动回到空闲态；手动刷新仍会显示同一条提示。自动继续也不再要求浏览器重新打开该会话。
 - 新增测试：重启路由的信任栅栏（401 / 403 / 无 Connection 时的环回归退）、客户端 slot
   注册、两处 seat 的折叠/展开渲染、设置页与二次确认对话框。
 
@@ -91,7 +93,7 @@
 - pnpm 首次安装 profile 依赖时可能把原生包写成待决的 `allowBuilds` 项。逐项确认
   `true` 或 `false` 后重跑 `dsh plugin --profile <name> add ...`，不要用全局放行绕过。
 - 若旧版本重启后已经停在浏览器 HTTP 错误页，请手工打开新进程日志打印的当前
-  `dsh web:` URL 完成一次恢复；升级到本版本后，设置卡片会等待首页真正就绪再刷新。
+  `dsh web:` URL 完成一次恢复；升级到本版本后，重启会等待首页真正就绪，再在原地报成功。
 
 ## 安装
 
@@ -107,7 +109,7 @@
 
 2. 重启 DSH（`/restart` 或 `restart_harness`），刷新页面后即可在 设置 → 左栏「DSH 重启」
    里配置重启行为与两处一键重启入口；主面板左下角动作栏（Settings 上方）默认出现 `↻`
-   按钮。任何入口都会先弹二次确认，确认后自动等待新进程恢复并刷新页面。
+   按钮。任何入口都会先弹二次确认，确认后等待新进程恢复，并在原地提示「重启完成」（不再强制刷新页面）。
 
 ## 构建
 
