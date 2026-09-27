@@ -6,8 +6,8 @@ const require = createRequire(import.meta.url)
 const React = require('react')
 const { renderToStaticMarkup } = require('react-dom/server')
 
-/** The slot the client half fills. */
-const SLOTS = ['settings.section']
+/** The three slots the client half fills, in registration order. */
+const SLOTS = ['settings.section', 'sidebar.footer.action', 'conversation.session.header.actions']
 
 /** The stylesheet DOM the bundle writes into, keyed by element id. */
 const domElements = new Map()
@@ -88,13 +88,20 @@ function fakeCtx(value, status) {
   return { ctx, injected, registered, scope }
 }
 
+/** Bind a registration's injected store the way the host binds it to a hook. */
+function storeHook(registration) {
+  const store = registration.options.inject().hooks.dshRestart
+  assert.ok(store, 'the inject face must carry the settings snapshot store')
+  return selector => selector(store.getSnapshot())
+}
+
 function entryFor(registered, name) {
   const entry = registered.find(candidate => candidate.options.name === name)
   assert.ok(entry, `${name} must be registered`)
   return entry
 }
 
-test('the client half fills one additive slot', () => {
+test('the client half fills three additive slots', () => {
   const bundle = loadClientBundle()
   const { ctx, injected, registered } = fakeCtx()
 
@@ -114,11 +121,70 @@ test('the client half fills one additive slot', () => {
   assert.equal(typeof sectionInject.set, 'function')
   assert.equal(typeof sectionInject.clear, 'function')
   assert.equal(typeof sectionInject.hooks.dshRestart, 'object')
+
+  // The quick seats take the settings store and nothing else: no connection or
+  // RPC dependency, because they drive the Web route through the same trust
+  // fence the rest of the app uses.
+  for (const name of SLOTS.slice(1)) {
+    const entry = entryFor(registered, name)
+    assert.equal(entry.options.id, 'dsh-restart')
+    assert.equal(entry.options.order, 30)
+    assert.equal(entry.options.locale, 'restart.card')
+    assert.equal(typeof entry.options.inject, 'function')
+    const face = entry.options.inject()
+    assert.deepEqual(Object.keys(face), ['hooks'])
+    assert.equal(typeof face.hooks.dshRestart, 'object')
+  }
 })
 
-test('the settings page carries the restart button and the configuration rows', () => {
+test('the sidebar seat renders a rail icon or a labelled button', () => {
   const bundle = loadClientBundle()
-  const { ctx, registered } = fakeCtx({ legacyRestart: false, continuePrompt: 'continue' })
+  const { ctx, registered } = fakeCtx()
+  bundle.apply(ctx)
+  const seat = entryFor(registered, 'sidebar.footer.action')
+  const useDshRestart = storeHook(seat)
+
+  const rail = renderToStaticMarkup(React.createElement(seat.component, { wide: false, t: key => key, useDshRestart }))
+  assert.match(rail, /<button/)
+  assert.match(rail, /aria-label="quickTitle"/)
+  assert.match(rail, /aria-haspopup="dialog"/)
+  assert.match(rail, /dsh-restart-quick-rail/)
+  assert.ok(!rail.includes('dsh-restart-quick-wide'))
+  assert.ok(!rail.includes('dsh-restart-quick-text'), 'the rail form shows only the icon')
+  assert.ok(rail.includes('\u21BB'))
+
+  const wide = renderToStaticMarkup(React.createElement(seat.component, { wide: true, t: key => key, useDshRestart }))
+  assert.match(wide, /dsh-restart-quick-wide/)
+  assert.match(wide, /dsh-restart-quick-text/)
+  assert.match(wide, />quickTitle</)
+})
+
+test('each placement toggle shows or hides its seat, without re-registering', () => {
+  const bundle = loadClientBundle()
+  const { ctx, registered, scope } = fakeCtx({ quickRestartSidebar: false, quickRestartHeader: true })
+  bundle.apply(ctx)
+  const sidebar = entryFor(registered, 'sidebar.footer.action')
+  const header = entryFor(registered, 'conversation.session.header.actions')
+  const sidebarHook = storeHook(sidebar)
+  const headerHook = storeHook(header)
+
+  const renderSidebar = () => renderToStaticMarkup(React.createElement(sidebar.component, { wide: true, t: key => key, useDshRestart: sidebarHook }))
+  const renderHeader = () => renderToStaticMarkup(React.createElement(header.component, { t: key => key, useDshRestart: headerHook }))
+
+  // Defaults: the sidebar entry is on, the header entry is off.
+  assert.equal(renderSidebar(), '', 'a disabled seat must render nothing at all')
+  assert.match(renderHeader(), /dsh-restart-quick-header/)
+
+  // Flipping the settings value moves both seats; the registrations stay put.
+  scope.merge({ quickRestartSidebar: true, quickRestartHeader: false })
+  assert.match(renderSidebar(), /dsh-restart-quick-wide/)
+  assert.equal(renderHeader(), '')
+  assert.deepEqual(registered.map(entry => entry.options.name), SLOTS)
+})
+
+test('the settings page carries the restart button and both placement toggles', () => {
+  const bundle = loadClientBundle()
+  const { ctx, registered } = fakeCtx({ legacyRestart: false, continuePrompt: 'continue', quickRestartSidebar: true, quickRestartHeader: false })
   bundle.apply(ctx)
   const section = entryFor(registered, 'settings.section')
   const useDshRestart = selector => selector(section.options.inject().hooks.dshRestart.getSnapshot())
@@ -131,7 +197,10 @@ test('the settings page carries the restart button and the configuration rows', 
     clear() {},
   }))
   assert.match(html, /dsh-restart-page-title">title</)
+  assert.match(html, /dsh-restart-group-title">quickSection</)
   assert.match(html, /id="dsh-restart-continue-prompt"/)
+  assert.ok(html.includes('quickSidebar'), 'the sidebar placement toggle is on the page')
+  assert.ok(html.includes('quickHeader'), 'the header placement toggle is on the page')
   assert.match(html, /dsh-restart-button[^>]*aria-haspopup="dialog"[^>]*>restartNow</)
   assert.match(html, /dsh-restart-action-hint/)
   // A namespace the host has not resolved yet renders no page at all.
@@ -205,6 +274,7 @@ test('the stylesheet is installed once, under one id', () => {
   const sheets = [...domElements.keys()].filter(id => id === 'dsh-restart-client-styles')
   assert.deepEqual(sheets, ['dsh-restart-client-styles'])
   const sheet = domElements.get('dsh-restart-client-styles').textContent
+  assert.match(sheet, /\.dsh-restart-quick-rail\{/)
   assert.match(sheet, /\.dsh-restart-confirm-panel\{/)
   assert.match(sheet, /var\(--dsw-alias-label-primary\)/, 'design tokens carry the app theme')
 })
