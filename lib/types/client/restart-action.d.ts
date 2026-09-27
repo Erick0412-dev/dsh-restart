@@ -20,6 +20,8 @@ export interface RestartAction {
     phase: RestartActionPhase;
     /** The Host answered, but the process identity never changed. */
     stale: boolean;
+    /** The new process answered: the restart succeeded and this page stayed open. */
+    succeeded: boolean;
     /** Transport-level failure detail, shown as the button's tooltip. */
     detail: string;
     /** Arm the confirmation dialog. Never restarts anything by itself. */

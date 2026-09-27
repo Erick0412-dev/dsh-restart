@@ -20,6 +20,7 @@ export declare const zh: {
     readonly quickTitle: "重启 DSH";
     readonly quickRestarting: "正在重启…";
     readonly quickFailed: "重启失败，点击重试";
+    readonly quickSucceeded: "重启完成";
     readonly confirmTitle: "确认重启 DSH？";
     readonly confirmBody: "将重启整个 DSH 进程：当前页面会短暂断开，正在运行的任务会被中断。";
     readonly confirmCancel: "取消";
@@ -47,6 +48,7 @@ export declare const en: {
     readonly quickTitle: "Restart DSH";
     readonly quickRestarting: "Restarting…";
     readonly quickFailed: "Restart failed, click to retry";
+    readonly quickSucceeded: "Restarted";
     readonly confirmTitle: "Restart DSH?";
     readonly confirmBody: "This restarts the whole DSH process: this page disconnects briefly and any running task is interrupted.";
     readonly confirmCancel: "Cancel";
