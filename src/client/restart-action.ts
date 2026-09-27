@@ -50,6 +50,8 @@ export interface RestartAction {
   phase: RestartActionPhase
   /** The Host answered, but the process identity never changed. */
   stale: boolean
+  /** The new process answered: the restart succeeded and this page stayed open. */
+  succeeded: boolean
   /** Transport-level failure detail, shown as the button's tooltip. */
   detail: string
   /** Arm the confirmation dialog. Never restarts anything by itself. */
@@ -66,9 +68,10 @@ interface GateState {
   phase: RestartActionPhase
   stale: boolean
   detail: string
+  succeeded: boolean
 }
 
-const IDLE: GateState = { phase: 'idle', stale: false, detail: '' }
+const IDLE: GateState = { phase: 'idle', stale: false, detail: '', succeeded: false }
 
 /**
  * Drive the gate from one component.
@@ -86,25 +89,32 @@ export function useRestartAction(): RestartAction {
   useEffect(() => () => { controller.current?.abort() }, [])
 
   const transition = (event: RestartActionEvent): void => {
-    setState(current => current.phase === reduceRestartPhase(current.phase, event)
-      ? current
-      : { phase: reduceRestartPhase(current.phase, event), stale: false, detail: '' })
+    setState(current => {
+      const next = reduceRestartPhase(current.phase, event)
+      if (next === current.phase) {
+        // `settle` on an idle seat is how a component clears the success note.
+        return current.succeeded ? { ...current, succeeded: false } : current
+      }
+      return { phase: next, stale: false, detail: '', succeeded: false }
+    })
   }
 
   const confirm = (): void => {
     if (state.phase !== 'confirming') return
     const aborter = new AbortController()
     controller.current = aborter
-    setState({ phase: 'busy', stale: false, detail: '' })
+    setState({ phase: 'busy', stale: false, detail: '', succeeded: false })
     void restartAndWait({ signal: aborter.signal, isVisible: () => document.visibilityState === 'visible' })
       .then((outcome) => {
         if (aborter.signal.aborted) return
         if (outcome === 'restarted') {
+          // The shell reconnects on its own, so this page stays open: this run
+          // is the one that can report success, and no reload is needed.
           rememberRestartCompleted()
-          window.location.reload()
+          setState({ phase: 'idle', stale: false, detail: '', succeeded: true })
           return
         }
-        setState({ phase: reduceRestartPhase('busy', 'fail'), stale: true, detail: '' })
+        setState({ phase: reduceRestartPhase('busy', 'fail'), stale: true, detail: '', succeeded: false })
       })
       .catch((error: unknown) => {
         if (aborter.signal.aborted) return
@@ -112,6 +122,7 @@ export function useRestartAction(): RestartAction {
           phase: reduceRestartPhase('busy', 'fail'),
           stale: false,
           detail: error instanceof Error ? error.message : String(error),
+          succeeded: false,
         })
       })
       .finally(() => { if (controller.current === aborter) controller.current = null })

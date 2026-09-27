@@ -17,7 +17,7 @@ import { consumeRestartCompleted } from './restart-marker.ts'
 import { useRestartAction } from './restart-action.ts'
 import { ensureStyles, styles as css } from './styles.ts'
 
-/** How long the "restarted" confirmation stays on the page after a reload. */
+/** How long the success note stays on the page after a restart. */
 const SUCCESS_MS = 5000
 
 /** The dsh-restart settings page. */
@@ -27,12 +27,17 @@ export function RestartSection(props: RestartSectionProps) {
   const state = useDshRestart(snapshot => snapshot)
   const restart = useRestartAction()
   const [completed, setCompleted] = useState(consumeRestartCompleted)
+  // Either this run reported success, or a manual refresh consumed the marker.
+  const succeeded = completed || restart.succeeded
 
   useEffect(() => {
-    if (!completed) return
-    const timer = window.setTimeout(() => { setCompleted(false) }, SUCCESS_MS)
+    if (!succeeded) return
+    const timer = window.setTimeout(() => {
+      setCompleted(false)
+      restart.settle()
+    }, SUCCESS_MS)
     return () => { window.clearTimeout(timer) }
-  }, [completed])
+  }, [succeeded])
 
   if (!state.available) return null
   const disabled = !state.writable
@@ -44,7 +49,7 @@ export function RestartSection(props: RestartSectionProps) {
   }
   const status = restart.phase === 'failed'
     ? (restart.stale ? t('restartStale') : t('restartFailed'))
-    : completed ? t('restartSucceeded') : t('restartHint')
+    : succeeded ? t('restartSucceeded') : t('restartHint')
 
   return (
     <div className={css.page}>
