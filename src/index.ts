@@ -73,6 +73,36 @@ const RestartConfigSchema: z<RestartConfig> = z.object({
   watchdogPollMs: z.number().default(1000),
 })
 
+/** The fields the settings page edits; the 0.1.7 form generation serves these. */
+const LIVE_CONFIG_FIELDS: readonly string[] = ['legacyRestart', 'continuePrompt', 'quickRestartSidebar', 'quickRestartHeader']
+
+/**
+ * Mark config fields as live so DSH 0.1.7 serves them on the settings page.
+ *
+ * The 0.1.7 Config-form generation exposes only the fields whose nearest
+ * schema ancestor carries a volatile mark (volatileForm in
+ * @deepseek-ai/dsh-settings), and it drops an entry that marks none from the
+ * settings describe() altogether - no namespace, so the page has nothing
+ * writable and every control renders disabled.
+ *
+ * The mark is the bit .volatile() sets, written into the schema meta directly
+ * so this stays independent of the schemastery typing (the accessor differs
+ * across releases, the meta bit does not).
+ */
+function markVolatile(schema: z<RestartConfig>, fields: readonly string[]): void {
+  const dict = (schema as unknown as {
+    dict?: Record<string, { meta?: Record<string, unknown> } | undefined>
+  }).dict
+  if (dict === undefined) return
+  for (const field of fields) {
+    const node = dict[field]
+    if (node === undefined) continue
+    node.meta = { ...(node.meta ?? {}), volatile: true }
+  }
+}
+
+markVolatile(RestartConfigSchema, LIVE_CONFIG_FIELDS)
+
 const DEFAULT_CONFIG: RestartConfig = {
   legacyRestart: false,
   continuePrompt: '（系统已重启完成）请继续之前未完成的工作。',
@@ -94,6 +124,9 @@ const DEFAULT_CONFIG: RestartConfig = {
  * settings.yaml section is offered for this plugin.
  */
 export const Config: z<RestartConfig> = RestartConfigSchema
+
+/** How long after boot the deferred settings-namespace check runs. */
+const SETTINGS_CHECK_MS = 5000
 
 /** The "process file index": boot facts for external inspection. */
 const INDEX_FILENAME = 'dsh-process.json'
@@ -609,6 +642,25 @@ export function apply(ctx: Context, config?: RestartConfig): void {
   } catch (error) {
     debugLog('apply: commands.register THREW: ' + String(error))
   }
+
+  // The settings page is editable only while the Host serves this entry a
+  // namespace; record the answer so a blank page is diagnosable from this log
+  // alone (volatileForm drops every entry that marks no field live). The check
+  // is deferred because a running apply is still loading its own entry, and
+  // SettingsForms.describe() skips entries whose fiber is not active yet.
+  const namespaceCheck = setTimeout(() => {
+    try {
+      ctx.inject(['settings'], (settingsCtx) => {
+        const settings = (settingsCtx as unknown as { settings?: { describe?: (options?: unknown) => unknown } }).settings
+        if (settings === undefined || typeof settings.describe !== 'function') { debugLog('settings: namespace check unavailable'); return }
+        const rows = settings.describe({ redactSecrets: true }) as Array<{ ns?: unknown }>
+        debugLog('settings: namespace served = ' + (rows.some(row => String(row.ns) === name) ? 'yes' : 'no') + ' (' + rows.length + ' namespaces)')
+      })
+    } catch (error) {
+      debugLog('settings: namespace check THREW: ' + String(error))
+    }
+  }, SETTINGS_CHECK_MS)
+  namespaceCheck.unref?.()
 
   debugLog('apply: complete')
 }
