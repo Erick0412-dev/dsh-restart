@@ -27,7 +27,7 @@ import type {} from '@deepseek-ai/dsh-shell'
 import type {} from '@deepseek-ai/dsh-sandbox-policy'
 import type { WebRoute } from '@deepseek-ai/dsh-host-webserver'
 import { defineTool } from '@deepseek-ai/dsh-tools'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
+import { createUserMessage, type ContextFormed } from '@deepseek-ai/dsh-llm'
 import z from '@deepseek-ai/schemastery'
 import type {} from '@deepseek-ai/dsh-settings'
 import { spawn } from 'node:child_process'
@@ -42,6 +42,22 @@ import { superviseRestartHelper } from './restart-helper-lifecycle.js'
 
 export const name = 'dsh-restart'
 export const inject = ['tools', 'commands', 'agents', 'shell', 'sandboxPolicy']
+
+/**
+ * Producer-owned message source kind for the session-format v4 log.
+ *
+ * Before v4 a plugin-authored message could claim the shared `plugin` kind.
+ * The v4 validator instead resolves `source.kind` against the producer-owned
+ * kinds declared in this merge-extensible map and rejects every other value
+ * with `SessionFormatError: format v4 message requires a producer-owned source
+ * kind`, so — exactly like the harness's own producers — we declare ours here
+ * rather than reusing someone else's identity.
+ */
+declare module '@deepseek-ai/dsh-llm' {
+  interface MessageSourceMap {
+    'dsh-restart': { readonly kind: 'dsh-restart' } & ContextFormed
+  }
+}
 
 /** Plugin configuration (editable via settings.yaml and the settings page). */
 interface RestartConfig {
@@ -191,7 +207,7 @@ function tryAutoContinue(ctx: Context, dynamic: () => RestartConfig): void {
       try {
         agent.followup(createUserMessage({
           content: [{ type: 'text', text: dynamic().continuePrompt }],
-          source: { kind: 'plugin', plugin: name, form: 'instructions' },
+          source: { kind: name, form: 'instructions' },
         }))
       } catch (error) {
         console.error('[dsh-restart] auto-continue failed:', error)
@@ -332,7 +348,12 @@ function restart(delayMs: number): RestartInfo {
 
 interface WebRestartRequest {
   socket: { remoteAddress?: string }
-  headers: { origin?: string; host?: string }
+  headers: {
+    origin?: string
+    host?: string
+    /** Remaining request headers; Connection's trust fence reads its own set. */
+    [name: string]: string | string[] | undefined
+  }
 }
 
 function isLoopbackWebRequest(req: WebRestartRequest): boolean {
@@ -351,6 +372,45 @@ function isTrustedWebRestart(req: WebRestartRequest): boolean {
   } catch {
     return false
   }
+}
+
+/**
+ * Refuse a privileged restart request, or return undefined to serve it.
+ *
+ * Every Web deployment already answers each /api call through Connection's
+ * fence: Host/Origin plus browser authentication. Reusing that same fence keeps
+ * this route exactly as reachable as the rest of the application — which is what
+ * lets the restart buttons work when the browser reaches DSH through a reverse
+ * proxy. It is not a privilege escalation: a client the fence admits can already
+ * drive the agent, and therefore already run shell commands and edit files, so
+ * restarting the process is strictly the weaker capability. Without a Connection
+ * service (non-Web host, or an older DSH) the historical rule is kept verbatim.
+ */
+function restartRequestRejection(
+  req: WebRestartRequest,
+  connection: HostConnectionTrust | undefined,
+  legacyTrust: () => boolean,
+): 401 | 403 | undefined {
+  if (connection && typeof connection.requestRejection === 'function') {
+    return connection.requestRejection({ headers: req.headers })
+  }
+  return legacyTrust() ? undefined : 403
+}
+
+/**
+ * Minimal structural view of Connection's Host-side trust fence.
+ *
+ * Declared locally instead of imported from @deepseek-ai/dsh-client-connection
+ * so the plugin still loads — and still falls back to the loopback rule — on
+ * hosts and DSH versions that ship no Connection service.
+ */
+interface HostConnectionTrust {
+  /**
+   * Apply Connection's Host/Origin fence and browser authentication to another
+   * Web route. Returns the status refusing this request, or undefined when the
+   * route may serve it.
+   */
+  requestRejection(request: { headers: Record<string, string | string[] | undefined> }): 401 | 403 | undefined
 }
 
 /** Session ids that should resume after a deliberate restart. */
@@ -464,6 +524,22 @@ export function apply(ctx: Context): void {
   } catch (error) {
     debugLog('apply: tryAutoContinue THREW: ' + String(error))
   }
+  // The Web host owns Connection; this plugin only borrows its trust fence, so
+  // the service is injected rather than demanded — a non-Web host has none and
+  // the route keeps its historical loopback rule.
+  let connectionTrust: HostConnectionTrust | undefined
+  try {
+    ctx.inject(['connection'], (connectionCtx) => {
+      const connection = (connectionCtx as unknown as { connection?: HostConnectionTrust }).connection
+      if (!connection || typeof connection.requestRejection !== 'function') return
+      connectionTrust = connection
+      connectionCtx.effect(() => () => {
+        if (connectionTrust === connection) connectionTrust = undefined
+      }, 'dsh-restart: connection trust')
+    })
+  } catch (error) {
+    debugLog('apply: connection trust inject THREW: ' + String(error))
+  }
   // The restart bundle may mount before the Web host. A one-shot ctx.get()
   // therefore makes the Settings button permanently unavailable on that boot.
   // Inject the optional service so the route follows the Web server lifetime.
@@ -474,9 +550,10 @@ export function apply(ctx: Context): void {
       path: '/plugins/dsh-restart/restart',
       handler: (req, res) => {
         if (req.method === 'GET') {
-          if (!isLoopbackWebRequest(req)) {
-            res.writeHead(403)
-            res.end('forbidden')
+          const rejection = restartRequestRejection(req, connectionTrust, () => isLoopbackWebRequest(req))
+          if (rejection !== undefined) {
+            res.writeHead(rejection)
+            res.end(rejection === 401 ? 'unauthorized' : 'forbidden')
             return
           }
           res.writeHead(200, {
@@ -491,9 +568,10 @@ export function apply(ctx: Context): void {
           res.end('method not allowed')
           return
         }
-        if (!isTrustedWebRestart(req)) {
-          res.writeHead(403)
-          res.end('forbidden')
+        const rejection = restartRequestRejection(req, connectionTrust, () => isTrustedWebRestart(req))
+        if (rejection !== undefined) {
+          res.writeHead(rejection)
+          res.end(rejection === 401 ? 'unauthorized' : 'forbidden')
           return
         }
         const sessionIds = runningSessionIds(ctx)
