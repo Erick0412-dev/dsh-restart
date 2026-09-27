@@ -43,10 +43,18 @@ import { superviseRestartHelper } from './restart-helper-lifecycle.js'
 export const name = 'dsh-restart'
 export const inject = ['tools', 'commands', 'agents', 'shell', 'sandboxPolicy']
 
-/** Plugin configuration (editable via settings.yaml and, later, the UI card). */
+/** Plugin configuration (editable via settings.yaml and the settings page). */
 interface RestartConfig {
   legacyRestart: boolean
   continuePrompt: string
+  /**
+   * Show the one-click restart entry at the sidebar foot, above Settings.
+   * A Web-UI preference, but it lives in the same settings namespace so the
+   * settings page persists it through settings.yaml like every other field.
+   */
+  quickRestartSidebar: boolean
+  /** Show the one-click restart entry beside the conversation title. */
+  quickRestartHeader: boolean
   /** @deprecated Retained only so existing settings files remain readable. */
   watchdogEnabled: boolean
   /** @deprecated The embedded watchdog is disabled and this value is ignored. */
@@ -58,6 +66,8 @@ interface RestartConfig {
 const RestartConfigSchema: z<RestartConfig> = z.object({
   legacyRestart: z.boolean().default(false),
   continuePrompt: z.string().default('（系统已重启完成）请继续之前未完成的工作。'),
+  quickRestartSidebar: z.boolean().default(true),
+  quickRestartHeader: z.boolean().default(false),
   watchdogEnabled: z.boolean().default(false),
   watchdogCooldownMs: z.number().default(60000),
   watchdogPollMs: z.number().default(1000),
@@ -66,6 +76,8 @@ const RestartConfigSchema: z<RestartConfig> = z.object({
 const DEFAULT_CONFIG: RestartConfig = {
   legacyRestart: false,
   continuePrompt: '（系统已重启完成）请继续之前未完成的工作。',
+  quickRestartSidebar: true,
+  quickRestartHeader: false,
   watchdogEnabled: false,
   watchdogCooldownMs: 60000,
   watchdogPollMs: 1000,

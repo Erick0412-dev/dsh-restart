@@ -7,8 +7,8 @@
  * its restart behaviour. Everything it edits is the host's own settings
  * namespace, so the values round-trip through settings.yaml.
  *
- * The restart button goes through a confirmation gate: this page can restart the
- * process the page itself is running in.
+ * The restart button here goes through the same confirmation gate as the main
+ * panel entries: this page can restart the process the page is running in.
  */
 import { useEffect, useState } from 'react'
 import type { RestartSectionProps } from './index.ts'
@@ -88,6 +88,37 @@ export function RestartSection(props: RestartSectionProps) {
             onChange={event => { writeText('continuePrompt', event.currentTarget.value) }}
           />
           <span className={css.hint}>{t('continuePromptHint')}</span>
+        </label>
+      </div>
+
+      <div className={css.rows}>
+        <p className={css.groupTitle}>{t('quickSection')}</p>
+        <label className={css.row + ' ' + css.toggleField}>
+          <input
+            className={css.checkbox}
+            type="checkbox"
+            checked={state.quickRestartSidebar}
+            disabled={disabled}
+            onChange={event => { set('quickRestartSidebar', event.currentTarget.checked) }}
+          />
+          <span className={css.toggleCopy}>
+            <span className={css.label}>{t('quickSidebar')}</span>
+            <span className={css.hint}>{t('quickSidebarHint')}</span>
+          </span>
+        </label>
+
+        <label className={css.row + ' ' + css.toggleField}>
+          <input
+            className={css.checkbox}
+            type="checkbox"
+            checked={state.quickRestartHeader}
+            disabled={disabled}
+            onChange={event => { set('quickRestartHeader', event.currentTarget.checked) }}
+          />
+          <span className={css.toggleCopy}>
+            <span className={css.label}>{t('quickHeader')}</span>
+            <span className={css.hint}>{t('quickHeaderHint')}</span>
+          </span>
         </label>
       </div>
 

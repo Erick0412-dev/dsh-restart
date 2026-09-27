@@ -80,6 +80,13 @@ try {
     await page.screenshot({ path: process.env.DSH_VERIFY_DEBUG_SCREENSHOT })
     console.log(JSON.stringify({ dialogs: await page.locator('[role="dialog"]').allInnerTexts() }))
   }
+  // The sidebar seat lives in the shell, so assert it before the settings dialog
+  // makes the rest of the page inert. It is registered into
+  // `sidebar.footer.action`, which the core sidebar renders directly above its
+  // own Settings row, and it keeps the locale's own label as its accessible name.
+  const sidebarRestart = page.getByRole('button', { name: '重启 DSH', exact: true })
+  await sidebarRestart.waitFor({ timeout: 20_000 })
+  assert.match(String(await sidebarRestart.getAttribute('title')), /重启 DSH/)
   await clickFirst([
     page.getByRole('button', { name: '设置', exact: true }),
     page.getByText('设置', { exact: true }),

@@ -1,14 +1,14 @@
 /**
- * Local slot contract for the surface this plugin contributes to.
+ * Local slot contracts for the three surfaces this plugin contributes to.
  *
- * The owning package is not a dependency of this plugin, and 0.1.5 (the line the
- * peer range still starts at) declares an empty SlotMap, so the key is declared
- * here with the shape 0.1.7 renders. Merging cannot conflict: this program never
- * pulls in the owner package's own declarations.
+ * None of the owning packages is a dependency of this plugin, and 0.1.5 (the
+ * line the peer range still starts at) declares an empty SlotMap, so every key
+ * is declared here with the shape 0.1.7 renders. Merging cannot conflict: this
+ * program never pulls in the owner packages' own declarations.
  *
- * It is an additive list slot. That is the whole conflict story: the plugin never
- * registers a 'single' or 'keyed' cell, so it can neither shadow another plugin
- * nor be shadowed by one — it stacks.
+ * All three are additive list slots. That is the whole conflict story: the
+ * plugin never registers a 'single' or 'keyed' cell, so it can neither shadow
+ * another plugin nor be shadowed by one — it stacks.
  */
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 
@@ -23,6 +23,21 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
       scope: 'root'
       owner: SettingsSectionOwnerProps
     }
+    /**
+     * Action row at the sidebar foot. The core sidebar renders these directly
+     * ABOVE its own Settings row, in registration order.
+     */
+    'sidebar.footer.action': {
+      kind: 'list'
+      scope: 'root'
+      owner: SidebarFooterActionOwnerProps
+    }
+    /** Session action beside the conversation title. */
+    'conversation.session.header.actions': {
+      kind: 'list'
+      scope: 'session'
+      owner: ConversationHeaderActionOwnerProps
+    }
   }
 }
 
@@ -30,4 +45,16 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 export interface SettingsSectionOwnerProps {
   /** Close the settings panel (the shell owns the open state). */
   close: () => void
+}
+
+/** Owner share the sidebar supplies to each footer action entry. */
+export interface SidebarFooterActionOwnerProps {
+  /** True while the sidebar is expanded; false on the collapsed icon rail. */
+  wide: boolean
+}
+
+/** Owner share of a conversation header action (entries receive no extra values). */
+export interface ConversationHeaderActionOwnerProps {
+  /** Marker field: header action entries receive no owner-specific values. */
+  children?: never
 }
