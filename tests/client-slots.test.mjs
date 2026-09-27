@@ -221,6 +221,9 @@ test('the settings page carries the restart button and both placement toggles', 
   assert.ok(html.includes('quickHeader'), 'the header placement toggle is on the page')
   assert.match(html, /dsh-restart-button[^>]*aria-haspopup="dialog"[^>]*>restartNow</)
   assert.match(html, /dsh-restart-action-hint/)
+  // Regression: the prompt field must stay typeable (the settings echo arrives
+  // asynchronously, so the field keeps a local draft while it is edited).
+  assert.ok(!/id="dsh-restart-continue-prompt"[^>]*disabled/.test(html), 'the prompt field accepts typing')
   // An unresolved namespace still renders the page: the note plus a working
   // restart button, instead of a blank panel the user cannot diagnose.
   const pending = fakeCtx({}, 'pending')
