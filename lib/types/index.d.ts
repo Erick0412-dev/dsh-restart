@@ -68,6 +68,11 @@ interface RestartConfig {
  * the entry has no settings namespace at all — the client configuration form
  * never reaches `ready`, the page renders its unavailable note, and no
  * settings.yaml section is offered for this plugin.
+ *
+ * The export alone is not enough: the form generation (`volatileForm`) serves
+ * the live fields only, so the schema marks every field the page edits with
+ * `volatileField` above, and an entry that marks none is dropped from the
+ * namespace list altogether.
  */
 export declare const Config: z<RestartConfig>;
 export declare function apply(ctx: Context, config?: RestartConfig): void;
