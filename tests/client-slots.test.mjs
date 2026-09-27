@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import test from 'node:test'
 
@@ -277,4 +278,9 @@ test('the stylesheet is installed once, under one id', () => {
   assert.match(sheet, /\.dsh-restart-quick-rail\{/)
   assert.match(sheet, /\.dsh-restart-confirm-panel\{/)
   assert.match(sheet, /var\(--dsw-alias-label-primary\)/, 'design tokens carry the app theme')
+})
+
+test('the shipped client bundle never reloads the page after a restart', () => {
+  const bundle = fs.readFileSync(require.resolve('../lib/client.js'), 'utf8')
+  assert.equal(bundle.includes('location.reload'), false)
 })

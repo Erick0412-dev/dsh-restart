@@ -1,14 +1,14 @@
 /**
  * Restart-completion marker.
  *
- * A restart reloads the page, so the settings page cannot report success from
- * its own React state: the run that would report it is the run being torn down.
- * The run that arranged the restart leaves a marker in sessionStorage instead,
- * and the next page load consumes it once.
+ * A restart no longer reloads the page: the run that arranged it reports success
+ * from its own React state. The marker covers the one case React state cannot —
+ * a manual refresh right after a restart, whose fresh run would otherwise have
+ * nothing to report. It is written on success and consumed once.
  */
 const RESTART_COMPLETED_KEY = 'dsh-restart:completed'
 
-/** Record that the restart being arranged succeeded (called just before reload). */
+/** Record a successful restart so a later page load can still report it. */
 export function rememberRestartCompleted(): void {
   try {
     sessionStorage.setItem(RESTART_COMPLETED_KEY, '1')

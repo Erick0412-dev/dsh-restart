@@ -70,7 +70,8 @@ export function QuickRestartButton({ variant, t }: QuickRestartButtonProps) {
   }, [])
 
   useEffect(() => {
-    if (restart.phase !== 'failed') return
+    // A failed or successful attempt both settle back to idle on their own.
+    if (restart.phase !== 'failed' && !restart.succeeded) return
     resetTimer.current = window.setTimeout(() => {
       resetTimer.current = null
       restart.settle()
@@ -81,11 +82,12 @@ export function QuickRestartButton({ variant, t }: QuickRestartButtonProps) {
         resetTimer.current = null
       }
     }
-  }, [restart.phase])
+  }, [restart.phase, restart.succeeded])
 
   const busy = restart.phase === 'busy'
   const failed = restart.phase === 'failed'
-  const label = busy ? t('quickRestarting') : failed ? t('quickFailed') : t('quickTitle')
+  const succeeded = restart.succeeded
+  const label = busy ? t('quickRestarting') : failed ? t('quickFailed') : succeeded ? t('quickSucceeded') : t('quickTitle')
   const className = [
     css.quick,
     VARIANT_CLASS[variant],
