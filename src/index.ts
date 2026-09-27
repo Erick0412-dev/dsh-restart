@@ -71,6 +71,18 @@ const DEFAULT_CONFIG: RestartConfig = {
   watchdogPollMs: 1000,
 }
 
+/**
+ * The plugin configuration schema, exported under the name the Host reads.
+ *
+ * DSH 0.1.7 serves a settings form only for a profile entry whose plugin
+ * module exports `Config`: the settings provider resolves an entry through
+ * `entry.fiber.runtime.Config` (`SettingsForms.schema`). Without this export
+ * the entry has no settings namespace at all — the client configuration form
+ * never reaches `ready`, the page renders its unavailable note, and no
+ * settings.yaml section is offered for this plugin.
+ */
+export const Config: z<RestartConfig> = RestartConfigSchema
+
 /** The "process file index": boot facts for external inspection. */
 const INDEX_FILENAME = 'dsh-process.json'
 
@@ -423,8 +435,13 @@ async function restartLegacy(ctx: Context, delayMs: number, policy: unknown): Pr
   }
 }
 
-export function apply(ctx: Context): void {
+export function apply(ctx: Context, config?: RestartConfig): void {
   debugLog(`apply: start pid=${process.pid}`)
+  // Cordis validates the profile entry against `Config` and hands the resolved
+  // configuration to apply; the Host re-applies this plugin when the settings
+  // page writes a field, so this value stays live without the removed 0.1.5
+  // `settings.installSection` wiring.
+  const initialConfig: RestartConfig = { ...DEFAULT_CONFIG, ...(config ?? {}) }
   try {
     writeProcessIndex()
     debugLog('apply: index written')
@@ -432,18 +449,28 @@ export function apply(ctx: Context): void {
     debugLog('apply: writeProcessIndex THREW: ' + String(error))
   }
   disableLegacyWatchdog()
-  let resolveConfig: () => RestartConfig = () => DEFAULT_CONFIG
+  let resolveConfig: () => RestartConfig = () => initialConfig
   const dynamic = (): RestartConfig => resolveConfig()
+  // 0.1.5 hosts exposed `settings.installSection`, which kept a plugin source of
+  // truth for its own config. 0.1.7 removed it in favour of the exported `Config`
+  // below, so the old call now only runs where it still exists.
   try {
     ctx.inject(['settings'], (settingsCtx) => {
-      settingsCtx.settings.installSection(ctx, 'dsh-restart', RestartConfigSchema, DEFAULT_CONFIG, {
-        setSource: (get) => { resolveConfig = get },
+      const settings = (settingsCtx as unknown as {
+        settings?: { installSection?: unknown }
+      }).settings
+      if (settings === undefined || typeof settings.installSection !== 'function') return
+      const install = settings.installSection as unknown as (
+        ctx: unknown, namespace: string, schema: unknown, defaults: unknown, hooks: unknown,
+      ) => unknown
+      install(ctx, 'dsh-restart', RestartConfigSchema, DEFAULT_CONFIG, {
+        setSource: (get: () => RestartConfig) => { resolveConfig = get },
         onChange: () => {},
       })
+      debugLog('apply: legacy settings.installSection attached')
     })
-    debugLog('apply: settings installed')
   } catch (error) {
-    debugLog('apply: settings installSection THREW: ' + String(error))
+    debugLog('apply: settings wiring THREW: ' + String(error))
   }
 
   try {

@@ -49,44 +49,61 @@ function loadClientBundle() {
   })
 }
 
-/** One host settings namespace, mutable through the same subscribe seam. */
-function fakeScope(value = {}, status = 'ready') {
+/** The native 0.1.7 settings form for this plugin entry, mutable through the same subscribe seam. */
+function fakeForms(value = {}, status = 'ready') {
   let current = { status, writable: true, value }
   const listeners = new Set()
+  const publish = () => { for (const listener of listeners) listener() }
+  const form = {
+    getSnapshot() { return current },
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener) } },
+    set(field, next) {
+      current = { ...current, value: { ...current.value, [field]: next } }
+      publish()
+      return Promise.resolve(true)
+    },
+    unset(field) {
+      const { [field]: _dropped, ...rest } = current.value
+      current = { ...current, value: rest }
+      publish()
+      return Promise.resolve(true)
+    },
+  }
   return {
     merge(next) {
       current = { ...current, value: { ...current.value, ...next } }
-      for (const listener of listeners) listener()
+      publish()
     },
-    bind() {
-      return {
-        getSnapshot() { return current },
-        subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener) } },
-        set() { return Promise.resolve() },
-        unset() { return Promise.resolve() },
-      }
-    },
+    get() { return form },
+    form,
   }
 }
 
 /** Minimal client ctx: records what the plugin asks for and registers. */
 function fakeCtx(value, status) {
-  const scope = fakeScope(value, status)
+  const forms = fakeForms(value, status)
   const injected = []
   const registered = []
   const ctx = {
     effect(callback) { return callback() },
+    inject(dependencies, callback) {
+      // Only the native 0.1.7 settings service is mounted here; the legacy
+      // settingsScope stays absent, exactly as on a vanilla 0.1.7 host.
+      if (dependencies.includes('configForms')) {
+        return callback({ configForms: forms, effect(cb) { return cb() } })
+      }
+      return undefined
+    },
     locale: {
       register() {},
       bind() { return (key) => 't:' + key },
     },
-    settingsScope: { bind: scope.bind },
     slots: {
       inject(key, callback) { injected.push(key); return callback() },
       register(options, component) { registered.push({ options, component }); return () => {} },
     },
   }
-  return { ctx, injected, registered, scope }
+  return { ctx, injected, registered, scope: forms, forms }
 }
 
 function entryFor(registered, name) {
@@ -135,13 +152,22 @@ test('the settings page carries the restart button and the configuration rows', 
   assert.match(html, /id="dsh-restart-continue-prompt"/)
   assert.match(html, /dsh-restart-button[^>]*aria-haspopup="dialog"[^>]*>restartNow</)
   assert.match(html, /dsh-restart-action-hint/)
-  // A namespace the host has not resolved yet renders no page at all.
+  // An unresolved namespace still renders the page: the note plus a working
+  // restart button, instead of a blank panel the user cannot diagnose.
   const pending = fakeCtx({}, 'pending')
   bundle.apply(pending.ctx)
   const pendingSection = entryFor(pending.registered, 'settings.section')
-  assert.equal(renderToStaticMarkup(React.createElement(pendingSection.component, {
-    close() {}, t: key => key, useDshRestart: () => ({ available: false }), set() {}, clear() {},
-  })), '')
+  const pendingHtml = renderToStaticMarkup(React.createElement(pendingSection.component, {
+    close() {}, t: key => key, set() {}, clear() {},
+    useDshRestart: selector => selector({
+      available: false, writable: false, legacyRestart: false, continuePrompt: '',
+      quickRestartSidebar: true, quickRestartHeader: false,
+    }),
+  }))
+  assert.match(pendingHtml, /settingsUnavailable/)
+  assert.match(pendingHtml, /dsh-restart-page-title/)
+  assert.match(pendingHtml, /dsh-restart-button[^>]*>restartNow</)
+  assert.ok(pendingHtml.includes('disabled'), 'an unresolved namespace disables the switches')
 })
 
 test('a stray confirm can never restart the harness', () => {
