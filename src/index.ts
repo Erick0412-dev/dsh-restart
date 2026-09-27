@@ -59,6 +59,24 @@ declare module '@deepseek-ai/dsh-llm' {
   }
 }
 
+/**
+ * Mark a config field as live so DSH 0.1.7 serves it on the settings page.
+ *
+ * The 0.1.7 Config-form generation exposes only the fields whose nearest
+ * schema ancestor carries the `.volatile()` mark (`volatileForm` in
+ * `@deepseek-ai/dsh-settings`); an entry with no volatile field is dropped
+ * from the settings `describe()` entirely, which leaves this plugin with no
+ * namespace and its page with nothing writable. Applied through a probe so
+ * the plugin still loads against schemastery lines that predate the
+ * modifier, where the same bit is written into `meta` directly.
+ */
+function volatileField<T>(field: z<T>): z<T> {
+  const mark = (field as unknown as { volatile?: () => z<T> }).volatile
+  if (typeof mark === 'function') return mark.call(field)
+  const node = field as unknown as { meta?: Record<string, unknown> }
+  node.meta = { ...(node.meta ?? {}), volatile: true }
+  return field
+}
 /** Plugin configuration (editable via settings.yaml and the settings page). */
 interface RestartConfig {
   legacyRestart: boolean
@@ -80,10 +98,10 @@ interface RestartConfig {
 }
 
 const RestartConfigSchema: z<RestartConfig> = z.object({
-  legacyRestart: z.boolean().default(false),
-  continuePrompt: z.string().default('（系统已重启完成）请继续之前未完成的工作。'),
-  quickRestartSidebar: z.boolean().default(true),
-  quickRestartHeader: z.boolean().default(false),
+  legacyRestart: volatileField(z.boolean().default(false)),
+  continuePrompt: volatileField(z.string().default('（系统已重启完成）请继续之前未完成的工作。')),
+  quickRestartSidebar: volatileField(z.boolean().default(true)),
+  quickRestartHeader: volatileField(z.boolean().default(false)),
   watchdogEnabled: z.boolean().default(false),
   watchdogCooldownMs: z.number().default(60000),
   watchdogPollMs: z.number().default(1000),
@@ -108,8 +126,16 @@ const DEFAULT_CONFIG: RestartConfig = {
  * the entry has no settings namespace at all — the client configuration form
  * never reaches `ready`, the page renders its unavailable note, and no
  * settings.yaml section is offered for this plugin.
+ *
+ * The export alone is not enough: the form generation (`volatileForm`) serves
+ * the live fields only, so the schema marks every field the page edits with
+ * `volatileField` above, and an entry that marks none is dropped from the
+ * namespace list altogether.
  */
 export const Config: z<RestartConfig> = RestartConfigSchema
+
+/** How long after boot the deferred settings-namespace check runs. */
+const SETTINGS_CHECK_MS = 5000
 
 /** The "process file index": boot facts for external inspection. */
 const INDEX_FILENAME = 'dsh-process.json'
@@ -585,6 +611,26 @@ export function apply(ctx: Context, config?: RestartConfig): void {
   } catch (error) {
     debugLog('apply: settings wiring THREW: ' + String(error))
   }
+
+  // The settings page is editable only while the Host serves this entry a
+  // namespace; record the answer so a blank page is diagnosable from this log
+  // alone (`volatileForm` drops every entry that marks no field live). The
+  // check is deferred because a running `apply` is still loading its own
+  // entry, and `SettingsForms.describe()` skips entries whose fiber is not
+  // active yet — an immediate check reports a false negative.
+  const namespaceCheck = setTimeout(() => {
+    try {
+      ctx.inject(['settings'], (settingsCtx) => {
+        const settings = (settingsCtx as unknown as { settings?: { describe?: (options?: unknown) => unknown } }).settings
+        if (settings === undefined || typeof settings.describe !== 'function') { debugLog('settings: namespace check unavailable'); return }
+        const rows = settings.describe({ redactSecrets: true }) as Array<{ ns?: unknown }>
+        debugLog('settings: namespace served = ' + (rows.some(row => String(row.ns) === name) ? 'yes' : 'no') + ' (' + rows.length + ' namespaces)')
+      })
+    } catch (error) {
+      debugLog('settings: namespace check THREW: ' + String(error))
+    }
+  }, SETTINGS_CHECK_MS)
+  namespaceCheck.unref?.()
 
   // The Session API can resume a Session without a GUI, which is what lets an
   // interrupted task continue after a restart even when the browser never
