@@ -1,36 +1,64 @@
 /**
- * dsh-restart — client half: a settings tab page (设置 → 插件, where DSH 0.1.7
- * replaced the configurable-plugin card list with a tab strip) plus a
- * persistent restart button in the sidebar footer rail. Both are bound to the
- * dsh-restart settings namespace, so edits persist to settings.yaml and the
- * Host reads them back through installSettingsSection.
+ * dsh-restart — client half.
+ *
+ * Three surfaces, one settings namespace:
+ *   1. 'settings.section'   — the plugin's own page in the settings navigation
+ *                             (0.1.7 replaced the 0.1.5 'settings.plugin.item'
+ *                             card list, which is why the old build rendered
+ *                             nothing at all);
+ *   2. 'sidebar.footer.action'      — the one-click entry at the sidebar foot,
+ *                                     directly above Settings (default on);
+ *   3. 'conversation.session.header.actions' — the same entry beside the
+ *                                     conversation title (default off).
+ *
+ * 2 and 3 are placement toggles on 1, and all of them are list slots, so other
+ * plugins stack beside this one instead of competing for the cell. Every restart
+ * - from the settings page or from either quick entry — goes through the same
+ * confirmation gate in restart-action.ts.
  */
 import type { Context } from './context-types.ts'
 import { createSnapshotStore, type SnapshotStore } from '@deepseek-ai/dsh-client-store'
 import type { SettingsScope } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type { PropsLocale } from '@deepseek-ai/dsh-client-ui-slots'
-import { SettingsCard } from './SettingsCard.tsx'
-import { SidebarRestartButton } from './SidebarRestartButton.tsx'
+import { HeaderQuickRestart, SidebarQuickRestart } from './QuickRestartButton.tsx'
+import { ConfirmDialogSurface } from './RestartConfirmDialog.tsx'
+import { RestartSection } from './RestartSection.tsx'
+import { reduceRestartPhase } from './restart-action.ts'
 import { en, zh } from './locales.ts'
 import { ensureStyles } from './styles.ts'
+import type { SettingsSectionOwnerProps } from './slot-contracts.ts'
 
 export const name = 'dsh-restart-client'
 export const inject = ['slots', 'locale', 'settingsScope']
 export const NS = 'restart.card'
 
+/** The slice of the host's settings the UI projects. */
 export interface RestartCardState {
+  /** The settings service has a ready value for this namespace. */
   available: boolean
   writable: boolean
   legacyRestart: boolean
   continuePrompt: string
+  /** Show the quick entry at the sidebar foot (above Settings). */
+  quickRestartSidebar: boolean
+  /** Show the quick entry beside the conversation title. */
+  quickRestartHeader: boolean
 }
 
-export type SettingsCardProps = PropsLocale<typeof NS> & {
+/** Props of the registered settings page. */
+export type RestartSectionProps = SettingsSectionOwnerProps & PropsLocale<typeof NS> & {
   useDshRestart: <R>(selector: (snapshot: RestartCardState) => R) => R
   set: (field: string, value: unknown) => void
   clear: (field: string) => void
 }
 
+/** Seams the test suite exercises directly (the bundle exposes no other one). */
+export const internals = { ConfirmDialogSurface, reduceRestartPhase }
+
+/**
+ * Wire the three surfaces up to the host settings namespace.
+ * @param ctx - the client cordis context.
+ */
 export function apply(ctx: Context): void {
   ensureStyles()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-restart: dictionaries')
@@ -46,35 +74,52 @@ export function apply(ctx: Context): void {
       writable: snap.writable,
       legacyRestart: value.legacyRestart === true,
       continuePrompt: typeof value.continuePrompt === 'string' ? value.continuePrompt : '',
+      // Absent (older settings.yaml, or a host that has not reloaded its
+      // schema yet) keeps the historical behaviour: the foot entry is on.
+      quickRestartSidebar: value.quickRestartSidebar !== false,
+      quickRestartHeader: value.quickRestartHeader === true,
     }
   }
 
   const store: SnapshotStore<RestartCardState> = createSnapshotStore(project())
   scope.subscribe(() => { store.set(project()) })
 
-  // Own tab page inside the Plugins settings section. The section renders a
-  // tab strip from this list slot (label + id are required by the host); the
-  // card body itself is unchanged.
-  ctx.slots.inject('settings.plugins.tab', () => ctx.slots.register({
-    name: 'settings.plugins.tab',
+  const hooksOnly = (): { hooks: { dshRestart: SnapshotStore<RestartCardState> } } => ({
+    hooks: { dshRestart: store },
+  })
+
+  // Own settings page. The nav row reads its label through resolveSlotLabel, so
+  // the thunk keeps the text following the active locale.
+  ctx.slots.inject('settings.section', () => ctx.slots.register({
+    name: 'settings.section',
     id: 'dsh-restart',
-    order: 10,
+    order: 50,
     label: () => t('title'),
     locale: NS,
     inject: () => ({
-      hooks: { dshRestart: store },
+      ...hooksOnly(),
       set: (field: string, value: unknown) => { void scope.set(field, value) },
       clear: (field: string) => { void scope.unset(field) },
     }),
-  }, SettingsCard))
+  }, RestartSection))
 
-  // Persistent restart button in the sidebar footer rail. The slot itself is
-  // declared by the core sidebar package; slots.inject defers this registration
-  // until that declaration exists, so bundle load order does not matter.
+  // Sidebar foot, above Settings. slots.inject defers until the core sidebar
+  // declares the slot, so bundle load order does not matter.
   ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
     name: 'sidebar.footer.action',
     id: 'dsh-restart',
     order: 30,
     locale: NS,
-  }, SidebarRestartButton))
+    inject: hooksOnly,
+  }, SidebarQuickRestart))
+
+  // Conversation header, for when the sidebar is collapsed or hidden. Session
+  // scoped: the owner only renders it while a session is open.
+  ctx.slots.inject('conversation.session.header.actions', () => ctx.slots.register({
+    name: 'conversation.session.header.actions',
+    id: 'dsh-restart',
+    order: 30,
+    locale: NS,
+    inject: hooksOnly,
+  }, HeaderQuickRestart))
 }
