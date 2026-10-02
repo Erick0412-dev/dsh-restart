@@ -247,6 +247,33 @@ interface HostResumableAgent {
 }
 
 /**
+ * Safely unwrap a cosmokit Volatile container ({ get: () => current }) or
+ * function getter into a primitive value. In DSH 0.1.7, settings-page fields
+ * marked volatile parse into Volatile objects. Deep-freezing or structuredClone
+ * across worker/IPC boundaries fails with DataCloneError if function closures
+ * remain attached.
+ */
+function unwrapVolatile<T>(value: unknown, fallback: T): T {
+  if (value === undefined || value === null) return fallback
+  let current: unknown = value
+  if (typeof current === 'object' && current !== null && 'get' in current && typeof (current as { get: unknown }).get === 'function') {
+    try {
+      current = (current as { get: () => unknown }).get()
+    } catch {
+      return fallback
+    }
+  }
+  if (typeof current === 'function') {
+    try {
+      current = (current as () => unknown)()
+    } catch {
+      return fallback
+    }
+  }
+  return (current as T) ?? fallback
+}
+
+/**
  * Continue every session that was mid-turn when the process restarted.
  *
  * A live agent is preferred. When none is registered yet, the Host Session API
@@ -265,8 +292,9 @@ function tryAutoContinue(ctx: Context, dynamic: () => RestartConfig, sessionResu
   const deliver = (agent: HostResumableAgent, sessionId: string): void => {
     debugLog(`auto-continue: agent for ${sessionId} is live, following up`)
     try {
+      const promptText = String(unwrapVolatile(dynamic().continuePrompt, DEFAULT_CONFIG.continuePrompt) || DEFAULT_CONFIG.continuePrompt)
       agent.followup(createUserMessage({
-        content: [{ type: 'text', text: dynamic().continuePrompt }],
+        content: [{ type: 'text', text: promptText }],
         source: { kind: name, form: 'instructions' },
       }))
     } catch (error) {
@@ -589,7 +617,18 @@ export function apply(ctx: Context, config?: RestartConfig): void {
   }
   disableLegacyWatchdog()
   let resolveConfig: () => RestartConfig = () => initialConfig
-  const dynamic = (): RestartConfig => resolveConfig()
+  const dynamic = (): RestartConfig => {
+    const raw = resolveConfig()
+    return {
+      legacyRestart: Boolean(unwrapVolatile(raw?.legacyRestart, DEFAULT_CONFIG.legacyRestart)),
+      continuePrompt: String(unwrapVolatile(raw?.continuePrompt, DEFAULT_CONFIG.continuePrompt)),
+      quickRestartSidebar: Boolean(unwrapVolatile(raw?.quickRestartSidebar, DEFAULT_CONFIG.quickRestartSidebar)),
+      quickRestartHeader: Boolean(unwrapVolatile(raw?.quickRestartHeader, DEFAULT_CONFIG.quickRestartHeader)),
+      watchdogEnabled: false,
+      watchdogCooldownMs: 60000,
+      watchdogPollMs: 1000,
+    }
+  }
   // 0.1.5 hosts exposed `settings.installSection`, which kept a plugin source of
   // truth for its own config. 0.1.7 removed it in favour of the exported `Config`
   // below, so the old call now only runs where it still exists.
@@ -744,7 +783,7 @@ export function apply(ctx: Context, config?: RestartConfig): void {
       // (already-ended) conversations are left alone — the client re-opens them.
       const sessionIds = runningSessionIds(ctx)
       if (sessionIds.length > 0) writeResumeMarker(sessionIds)
-      if (dynamic().legacyRestart) {
+      if (dynamic().legacyRestart && process.platform === 'win32') {
         let policy: unknown
         if (exec?.agent?.session) {
           try { policy = ctx.sandboxPolicy.resolve({ session: exec.agent.session }) } catch { policy = undefined }
@@ -770,7 +809,7 @@ export function apply(ctx: Context, config?: RestartConfig): void {
       const sessionIds = runningSessionIds(ctx)
       if (sessionIds.length > 0) writeResumeMarker(sessionIds)
       let result: unknown
-      if (dynamic().legacyRestart) {
+      if (dynamic().legacyRestart && process.platform === 'win32') {
         let policy: unknown
         if (invocation?.agent?.session) {
           try { policy = ctx.sandboxPolicy.resolve({ session: invocation.agent.session }) } catch { policy = undefined }
