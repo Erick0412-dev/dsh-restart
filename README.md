@@ -1,9 +1,9 @@
-# @erick0412/dsh-restart
+# @erick0412-dev/dsh-restart
 
 > **DeepSeek Harness 的进程重启与任务接续插件。**  
 > 一键重启、配置秒生效；AI 自主重启并接续任务；专为 DSH 0.1.7+ 设计。
 
-[![npm](https://img.shields.io/npm/v/@erick0412/dsh-restart?style=flat-square&color=blue)](https://www.npmjs.com/package/@erick0412/dsh-restart)
+[![npm](https://img.shields.io/npm/v/@erick0412-dev/dsh-restart?style=flat-square&color=blue)](https://www.npmjs.com/package/@erick0412-dev/dsh-restart)
 [![license](https://img.shields.io/badge/license-MIT-green?style=flat-square)](./LICENSE)
 [![DSH](https://img.shields.io/badge/DSH-v0.1.7%2B-purple?style=flat-square)](#)
 [![tests](https://img.shields.io/badge/tests-29%20passed-brightgreen?style=flat-square)](#)
@@ -45,7 +45,7 @@
 ## 快速安装
 
 ```bash
-dsh plugin --profile web add @erick0412/dsh-restart
+dsh plugin --profile web add @erick0412-dev/dsh-restart
 ```
 
 在 Web UI 中打开 **设置 → 左侧「DSH 重启」** 即可根据习惯调整入口与自动续跑提示词。
