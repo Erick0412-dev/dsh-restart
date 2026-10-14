@@ -31,7 +31,7 @@ function loadClientBundle() {
   }
   const definition = registered
   assert.ok(definition, 'the bundle must register itself with __ModuleLoader__')
-  assert.equal(definition.id, 'dsh-restart')
+  assert.equal(definition.id, '@erick0412-dev/dsh-restart')
 
   const store = {
     createSnapshotStore(initial) {

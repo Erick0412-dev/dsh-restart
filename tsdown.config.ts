@@ -9,7 +9,7 @@
  */
 import type { UserConfig } from 'tsdown'
 
-const PLUGIN_ID = 'dsh-restart'
+const PLUGIN_ID = '@erick0412-dev/dsh-restart'
 
 const CLIENT_EXTERNALS = [
   'react',
